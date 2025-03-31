@@ -3,6 +3,7 @@ import librosa.display
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import resample
+from IPython.display import Audio, display
 
 def sample_and_hold(t_org, signal, fs_ori, fs_dest):
   t_dest = 1/fs_dest
@@ -17,16 +18,18 @@ def sample_and_hold(t_org, signal, fs_ori, fs_dest):
     t_sample.append(i *t_dest)
     i += 1
   return signal_resample, t_sample, samples
-def fxquant(s, bit):
-    # s : señal de entrada normalizada entre -1 y 1
-    # bit : bits de cuantizacion
-    Plus1 = np.power(2, (bit - 1))
-    X = s * Plus1
-    X = np.round(X)
-    X = np.minimum(Plus1, X)  # Cambiar el límite superior a Plus1
-    X = np.maximum(-1.0 * Plus1, X)
-    X = X / Plus1
-    return X
+
+def fxquant (s , bit ) :
+  # s : señal de entrada normalizada entre -1 y 1
+  # bit : bits de cuantizacion
+  Plus1 = np.power(2,(bit-1))
+  X = s*Plus1
+  X = np.round(X)
+  X = np.minimum(Plus1-1.0, X)
+  X = np.maximum(-1.0*Plus1,X)
+  X = X/Plus1
+  return X
+
 def plot_spectrogram(data, fs):
   
   '''
@@ -193,15 +196,157 @@ def ejercicio2_2(audio_path):
     plt.tight_layout()
     plt.show()
 
-def ejercicio2_3(audio, fs_original, fs_list):
-    
+def ejercicio2_3(audio_path):
+    audio, fs_original = librosa.load(audio_path, sr=8000)
+
+    fs_list = [8000, 4000, 2000, 1000]
     for fs_target in fs_list:
-        # Resamplear la señal completa
-        resampled = librosa.resample(audio, orig_sr=fs_original, target_sr=fs_target)
+        tramo = librosa.resample(audio, orig_sr=fs_original, target_sr=fs_target)
+        
+        print(f"\n🎧 Audio a {fs_target} Hz:")
+        display(Audio(tramo, rate=fs_target))
+def ejercicio2_4(audio_path):
 
-        print(f"\n🔊 Reproduciendo audio a {fs_target} Hz...")
-        sd.play(resampled, fs_target)
-        sd.wait()  # Esperar a que termine la reproducción
+    audio, fs = librosa.load(audio_path, sr=None)
 
-        time.sleep(1)  # Pausa entre audios para claridad
-ejercicio2_2("C:/Users/Miguel/sample.wav")
+    # Extraer segmento de 20 ms desde el centro
+    duration_ms = 20
+    segment_samples = int((duration_ms / 1000) * fs)
+    center = len(audio) // 2
+    start = center - segment_samples // 2
+    end = start + segment_samples
+    segment = audio[start:end]
+
+    # Función de cuantización
+    # Preparar datos
+    bit_depths = [8, 4, 2, 1]
+    quantized_segments = [fxquant(segment, bits) for bits in bit_depths]
+    t = np.linspace(0, duration_ms / 1000, segment_samples)
+
+    # Graficar
+    plt.figure(figsize=(12, 8))
+
+    for i, (bits, q_segment) in enumerate(zip(bit_depths, quantized_segments)):
+        plt.subplot(len(bit_depths), 1, i + 1)
+        plt.plot(t, segment, label='Original', color='red', alpha=1)
+        plt.plot(t, q_segment, label=f'Cuantizado ({bits} bits)', color='blue')
+        plt.title(f'Cuantización a {bits} bits')
+        plt.ylabel('Amplitud')
+        plt.grid(True)
+        plt.legend()
+
+    plt.xlabel('Tiempo (s)')
+    plt.tight_layout()
+    plt.show()
+def ejercicio2_5(filepath):
+    '''
+    Toma un segmento de 500ms del audio, lo cuantiza a diferentes niveles de bits
+    y grafica los espectrogramas correspondientes usando la función dada.
+    
+    Parámetro:
+    - filepath: ruta al archivo .wav
+    '''
+    # Cargar audio
+    audio, fs = librosa.load(filepath, sr=None)
+
+    # Extraer 500 ms desde el centro
+    duration_ms = 500
+    segment_samples = int((duration_ms / 1000) * fs)
+    center = len(audio) // 2
+    start = center - segment_samples // 2
+    end = start + segment_samples
+    segment = audio[start:end]
+
+    # Cuantización
+    def quantize(segment, bits):
+        levels = 2 ** bits
+        norm = segment / np.max(np.abs(segment))         # Normalizar a [-1, 1]
+        scaled = (norm + 1) / 2                           # Escalar a [0, 1]
+        quantized = np.round(scaled * (levels - 1)) / (levels - 1)
+        quantized = (quantized * 2) - 1                   # Volver a [-1, 1]
+        return quantized
+
+    # Profundidades de bits a probar
+    bit_depths = [16, 8, 4, 2]
+    quantized_segments = [quantize(segment, bits) for bits in bit_depths]
+
+    # Graficar espectrogramas
+    plt.figure(figsize=(12, 10))
+
+    for i, (bits, q_segment) in enumerate(zip(bit_depths, quantized_segments)):
+        plt.subplot(2, 2, i + 1)
+        plot_spectrogram(q_segment, fs)
+        plt.title(f'Espectrograma - Cuantización a {bits} bits')
+        plt.ylim([0, fs // 2])  # Límite de Nyquist
+        plt.xlim([0, 0.5])      # 500 ms
+
+    plt.tight_layout()
+    plt.show()
+
+def ejercicio2_6(filepath):
+    '''
+    Carga un audio completo y lo reproduce cuantizado a diferentes niveles de bits.
+    
+    Parámetro:
+    - filepath: ruta al archivo .wav
+    '''
+    # Cargar audio completo
+    audio, fs = librosa.load(filepath, sr=None)
+
+    # Función de cuantización
+
+    # Profundidades de bits a probar
+    bit_depths = [16, 8, 4, 2, 1]
+
+    for bits in bit_depths:
+        audio_q = fxquant(audio, bits)
+        print(f"\n🎧 Reproduciendo audio completo a {bits} bits:")
+        display(Audio(audio_q, rate=fs))
+def ejercicio2_7(filepath):
+    '''
+    Compara el espectrograma del audio completo con los espectrogramas de segmentos
+    cuantizados a 16, 8, 4 y 2 bits (500 ms).
+    '''
+    # Cargar audio completo
+    audio, fs = librosa.load(filepath, sr=None)
+
+    # Calcular espectrograma del audio completo
+    plt.figure(figsize=(12, 5))
+    plt.title("Espectrograma - Audio completo (original)")
+    plot_spectrogram(audio, fs)
+    plt.ylim([0, fs // 2])
+    plt.xlabel("Tiempo (s)")
+    plt.tight_layout()
+    plt.show()
+
+    # Extraer segmento de 500 ms desde el centro
+    segment_duration_ms = 500
+    N = int((segment_duration_ms / 1000) * fs)
+    center = len(audio) // 2
+    start = center - N // 2
+    end = start + N
+    segment = audio[start:end]
+
+    # Función de cuantización
+    def quantize(signal, bits):
+        levels = 2 ** bits
+        norm = signal / np.max(np.abs(signal))
+        scaled = (norm + 1) / 2
+        q = np.round(scaled * (levels - 1)) / (levels - 1)
+        return (q * 2) - 1
+
+    # Cuantizaciones a comparar
+    bit_depths = [16, 8, 4, 2]
+    quantized_segments = [quantize(segment, bits) for bits in bit_depths]
+
+    # Graficar espectrogramas de los segmentos cuantizados
+    plt.figure(figsize=(12, 10))
+    for i, (bits, q_segment) in enumerate(zip(bit_depths, quantized_segments)):
+        plt.subplot(2, 2, i + 1)
+        plot_spectrogram(q_segment, fs)
+        plt.title(f'Segmento 500ms - Cuantizado a {bits} bits')
+        plt.ylim([0, fs // 2])
+        plt.xlim([0, 0.5])
+    plt.tight_layout()
+    plt.show()
+ejercicio2_7("C:/Users/Miguel/sample.wav")
